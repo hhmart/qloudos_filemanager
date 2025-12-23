@@ -23,18 +23,23 @@ namespace QloudosFileManager.Services
         /// <summary>
         /// Importiert eine Liste von Pfaden. Dateien und Verzeichnisse werden entsprechend behandelt.
         /// </summary>
-        public void ImportPaths(IEnumerable<string> paths, bool recursive, bool takeOwners)
+        public void ImportPaths(IEnumerable<string> paths, bool recursive, bool takeOwners, string r3Root,
+            System.Collections.Generic.Dictionary<string,string>? userMapping = null,
+            bool createMissingUsers = false,
+            bool applyPermissions = false,
+            System.Collections.Generic.List<string>? blacklist = null)
         {
             foreach (var path in paths)
             {
                 if (File.Exists(path))
                 {
-                    ImportFile(path, "/", takeOwners);
+                    ImportFile(path, r3Root ?? "/", takeOwners, userMapping, createMissingUsers, applyPermissions, blacklist);
                 }
-                else if (Directory.Exists(path))
+                else if (Directory.Exists(path)) 
                 {
                     var baseFolder = Path.GetFileName(path) ?? "";
-                    ImportDirectory(path, "/" + baseFolder, recursive, takeOwners);
+                    var target = (r3Root ?? "/").TrimEnd('/') + "/" + baseFolder;
+                    ImportDirectory(path, target, recursive, takeOwners, userMapping, createMissingUsers, applyPermissions, blacklist);
                 }
                 else
                 {
@@ -43,24 +48,32 @@ namespace QloudosFileManager.Services
             }
         }
 
-        private void ImportDirectory(string lokalerPfad, string r3Pfad, bool recursive, bool takeOwners)
+        private void ImportDirectory(string lokalerPfad, string r3Pfad, bool recursive, bool takeOwners,
+            System.Collections.Generic.Dictionary<string,string>? userMapping,
+            bool createMissingUsers,
+            bool applyPermissions,
+            System.Collections.Generic.List<string>? blacklist)
         {
             _logger.Short($"Importiere Ordner: {lokalerPfad} -> {r3Pfad}");
             foreach (var file in Directory.GetFiles(lokalerPfad))
             {
-                ImportFile(file, r3Pfad, takeOwners);
+                ImportFile(file, r3Pfad, takeOwners, userMapping, createMissingUsers, applyPermissions, blacklist);
             }
             if (recursive)
             {
                 foreach (var dir in Directory.GetDirectories(lokalerPfad))
                 {
                     var name = Path.GetFileName(dir) ?? "";
-                    ImportDirectory(dir, r3Pfad.TrimEnd('/') + "/" + name, true, takeOwners);
+                    ImportDirectory(dir, r3Pfad.TrimEnd('/') + "/" + name, true, takeOwners, userMapping, createMissingUsers, applyPermissions, blacklist);
                 }
             }
         }
 
-        private void ImportFile(string lokalerDateiPfad, string r3Pfad, bool takeOwners)
+        private void ImportFile(string lokalerDateiPfad, string r3Pfad, bool takeOwners,
+            System.Collections.Generic.Dictionary<string,string>? userMapping,
+            bool createMissingUsers,
+            bool applyPermissions,
+            System.Collections.Generic.List<string>? blacklist)
         {
             _logger.Verbose($"Lese Datei: {lokalerDateiPfad}");
             var bytes = File.ReadAllBytes(lokalerDateiPfad);
@@ -86,6 +99,38 @@ namespace QloudosFileManager.Services
 
             var id = _db.SaveFile(fe);
             _logger.Short($"Importiert: {name} ({id}) in {r3Pfad}");
+
+            // Berechtigungen übernehmen (vereinfacht)
+            if (applyPermissions)
+            {
+                try
+                {
+                    var fac = new FileInfo(lokalerDateiPfad).GetAccessControl();
+                    foreach (System.Security.AccessControl.FileSystemAccessRule rule in fac.GetAccessRules(true, true, typeof(System.Security.Principal.NTAccount)))
+                    {
+                        var localUser = rule.IdentityReference.Value.Split('\\').Last();
+                        if (blacklist != null && blacklist.Contains(localUser, System.StringComparer.OrdinalIgnoreCase)) continue;
+                        string targetUser = string.Empty;
+                        if (userMapping != null && userMapping.TryGetValue(localUser, out var mapped)) targetUser = mapped;
+                        var targetUserEntry = _db.GetUserByUsername(targetUser ?? string.Empty);
+                        if (targetUserEntry == null)
+                        {
+                            if (createMissingUsers && !string.IsNullOrWhiteSpace(targetUser))
+                            {
+                                var newId = _db.CreateUser(targetUser, targetUser);
+                                targetUserEntry = _db.GetUserByUsername(targetUser);
+                            }
+                        }
+                        if (targetUserEntry != null)
+                        {
+                            var rights = rule.FileSystemRights.ToString();
+                            var perm = new PermissionEntry { UserId = targetUserEntry.Id, ObjectType = "file", ObjectId = id, Rights = rights };
+                            _db.AddPermission(perm);
+                        }
+                    }
+                }
+                catch { }
+            }
         }
     }
 }

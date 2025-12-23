@@ -17,11 +17,19 @@ namespace QloudosFileManager
             // Standardwerte
             string dbFile = "db_r3.sqlite";
             bool createDbIfMissing = false;
+            string targetRoot = "/"; // Verzeichnisebene im R3, ab der importiert wird (default: root)
             var importPaths = new List<string>();
             var exportPaths = new List<string>();
             bool recursive = false;
             bool takeOwners = false;
             string? mapUsersFile = null;
+            bool createUsersIfMissing = false;
+            bool applyPermissions = false;
+            string? autoMapArg = null;
+            bool autoMapRecursive = false;
+            string? userManageFile = null;
+            string? userManageAction = null;
+            string? blacklistFile = null;
             Logger.Stufe verbosity = Logger.Stufe.Short;
 
             // Einfache Argument-Verarbeitung
@@ -38,6 +46,9 @@ namespace QloudosFileManager
                     case "--db-connection":
                         if (i + 1 < args.Length) { dbFile = args[++i]; } else { Console.WriteLine("Fehlender Wert für --db-connection"); return 2; }
                         break;
+                    case "--target-root":
+                        if (i + 1 < args.Length) { targetRoot = args[++i]; } else { Console.WriteLine("Fehlender Wert für --target-root"); return 2; }
+                        break;
                     case "--create-db":
                         createDbIfMissing = true;
                         break;
@@ -53,6 +64,24 @@ namespace QloudosFileManager
                         takeOwners = true; break;
                     case "--map-users-file":
                         if (i + 1 < args.Length) { mapUsersFile = args[++i]; } else { Console.WriteLine("Fehlender Wert für --map-users-file"); return 2; }
+                        break;
+                    case "--create-users-if-missing":
+                        createUsersIfMissing = true; break;
+                    case "--apply-permissions":
+                        applyPermissions = true; break;
+                    case "--auto-map":
+                        if (i + 1 < args.Length) { autoMapArg = args[++i]; } else { Console.WriteLine("Fehlender Wert für --auto-map"); return 2; }
+                        break;
+                    case "--auto-map-recursive":
+                        autoMapRecursive = true; break;
+                    case "--user-manage-file":
+                        if (i + 1 < args.Length) { userManageFile = args[++i]; } else { Console.WriteLine("Fehlender Wert für --user-manage-file"); return 2; }
+                        break;
+                    case "--user-manage-action":
+                        if (i + 1 < args.Length) { userManageAction = args[++i]; } else { Console.WriteLine("Fehlender Wert für --user-manage-action"); return 2; }
+                        break;
+                    case "--blacklist":
+                        if (i + 1 < args.Length) { blacklistFile = args[++i]; } else { Console.WriteLine("Fehlender Wert für --blacklist"); return 2; }
                         break;
                     case "--verbosity":
                         if (i + 1 < args.Length)
@@ -76,8 +105,34 @@ namespace QloudosFileManager
 
             var logger = new Logger(verbosity);
 
-            // Verbindung bauen: simpel als Data Source=file
-            var connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = dbFile }.ToString();
+            // Verbindung bauen: wenn dbFile ein ConnectionString enthält (z.B. 'Server='), benutze direkt.
+            // Wenn dbFile ein Pfad zu einer Datei ist, wird der Inhalt gelesen und als ConnectionString verwendet.
+            string connectionString;
+            bool looksLikeConnectionString(string s) => !string.IsNullOrWhiteSpace(s) && s.Contains('=');
+
+            if (looksLikeConnectionString(dbFile))
+            {
+                // Direkter ConnectionString übergeben
+                connectionString = dbFile;
+            }
+            else if (File.Exists(dbFile))
+            {
+                // Datei existiert; lies Inhalt und bestimme, ob es ein ConnectionString oder SQLite-Datei ist
+                var content = File.ReadAllText(dbFile).Trim();
+                if (looksLikeConnectionString(content)) connectionString = content;
+                else connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = dbFile }.ToString();
+            }
+            else if (File.Exists("db.sql"))
+            {
+                var content = File.ReadAllText("db.sql").Trim();
+                if (looksLikeConnectionString(content)) connectionString = content;
+                else connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = "db_r3.sqlite" }.ToString();
+            }
+            else
+            {
+                // Standard: SQLite-Datei
+                connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = dbFile }.ToString();
+            }
 
             try
             {
@@ -86,6 +141,43 @@ namespace QloudosFileManager
 
                 var importer = new ImportService(db, logger);
                 var exporter = new ExportService(db, logger);
+                var mapping = new System.Collections.Generic.Dictionary<string,string>(System.StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrWhiteSpace(mapUsersFile) && File.Exists(mapUsersFile))
+                {
+                    mapping = UserMappingService.LoadMapping(mapUsersFile);
+                }
+
+                // blacklist
+                var blacklist = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrWhiteSpace(blacklistFile) && File.Exists(blacklistFile))
+                {
+                    foreach (var l in File.ReadAllLines(blacklistFile)) if (!string.IsNullOrWhiteSpace(l)) blacklist.Add(l.Trim());
+                }
+
+                // auto-map: format <searchPath>=<outFile> or just <searchPath>
+                if (!string.IsNullOrWhiteSpace(autoMapArg))
+                {
+                    var outFile = "auto_mapping.txt";
+                    var searchPath = autoMapArg;
+                    if (autoMapArg.Contains('=')) { var parts = autoMapArg.Split('=',2); searchPath = parts[0]; outFile = parts[1]; }
+                    var auto = UserMappingService.AutoMapFromAcl(searchPath, autoMapRecursive, db.GetAllUsers());
+                    UserMappingService.SaveMapping(auto, outFile);
+                    Console.WriteLine($"Automapping erzeugt: {outFile}");
+                }
+
+                // user-manage: apply mapping file to create/delete users in target system
+                if (!string.IsNullOrWhiteSpace(userManageFile) && File.Exists(userManageFile) && !string.IsNullOrWhiteSpace(userManageAction))
+                {
+                    var um = UserMappingService.LoadMapping(userManageFile);
+                    foreach (var kv in um)
+                    {
+                        if (blacklist.Contains(kv.Key) || blacklist.Contains(kv.Value)) continue;
+                        if (userManageAction == "add-first" || userManageAction == "add-both") db.CreateUser(kv.Key, kv.Key);
+                        if (userManageAction == "add-second" || userManageAction == "add-both") if (!string.IsNullOrWhiteSpace(kv.Value)) db.CreateUser(kv.Value, kv.Value);
+                        if (userManageAction == "delete-first" || userManageAction == "delete-both") db.DeleteUserByUsername(kv.Key);
+                        if (userManageAction == "delete-second" || userManageAction == "delete-both") if (!string.IsNullOrWhiteSpace(kv.Value)) db.DeleteUserByUsername(kv.Value);
+                    }
+                }
 
                 if (importPaths.Count == 0 && exportPaths.Count == 0)
                 {
@@ -94,7 +186,7 @@ namespace QloudosFileManager
 
                 if (importPaths.Count > 0)
                 {
-                    importer.ImportPaths(importPaths, recursive, takeOwners);
+                    importer.ImportPaths(importPaths, recursive, takeOwners, targetRoot, mapping, createUsersIfMissing, applyPermissions, blacklist);
                 }
 
                 if (exportPaths.Count > 0)
@@ -110,7 +202,7 @@ namespace QloudosFileManager
                             r3p = parts[0];
                             localTarget = parts[1];
                         }
-                        exporter.ExportPath(r3p, localTarget, recursive, null);
+                        exporter.ExportPath(r3p, localTarget, recursive, mapping, createUsersIfMissing, applyPermissions);
                     }
                 }
 
