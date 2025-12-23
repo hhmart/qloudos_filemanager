@@ -3,10 +3,15 @@ qloudos_filemanager
 
 Kurze Anleitung (Deutsch)
 
-Kompiliere mit dotnet (SDK 7+):
+Zielumgebung:
+- Microsoft Visual Studio Community 2022 (64-Bit) Version 17.14.13 (August 2025)
+- .NET 10 SDK
+
+Kompilieren und Ausführen mit `dotnet`:
 
 ```bash
 dotnet build
+dotnet run -- --help
 ```
 
 Beispiel: Erstelle DB und importiere rekursiv
@@ -20,5 +25,9 @@ Export Beispiel
 ```bash
 dotnet run -- --export /myfolder=./out --verbosity verbose
 ```
+
+Wichtige Dateien:
+- `db.sql` : optionale Textdatei mit SQL-Server-ConnectionString
+- `benutzer.txt` : leere Datei, kann für Benutzerzuordnungen genutzt werden
 
 Parameter sind englisch (z.B. `--import`, `--export`), Hilfe und Ausgaben sind deutsch.
