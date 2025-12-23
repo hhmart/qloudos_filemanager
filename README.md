@@ -31,3 +31,32 @@ Wichtige Dateien:
 - `benutzer.txt` : leere Datei, kann für Benutzerzuordnungen genutzt werden
 
 Parameter sind englisch (z.B. `--import`, `--export`), Hilfe und Ausgaben sind deutsch.
+
+Workflows
+---------
+
+Beispiel: Import mit Mapping und Anlage fehlender Zielbenutzer
+
+```bash
+dotnet run -- --db-connection db.sql --create-db --import C:\Temp\data --recursive --target-root /archive --map-users-file benutzer.txt --create-users-if-missing --apply-permissions --verbosity short
+```
+
+Beispiel: Export eines R3-Ordners in ein lokales Verzeichnis mit Mapping-Ausgabe
+
+```bash
+dotnet run -- --db-connection "Server=BC-W10-VMD;Database=db_r3;User Id=sa;Password=...;" --export /project=./out --map-users-file benutzer.txt --apply-permissions --verbosity short
+```
+
+Beispiel: Automatisches Erzeugen einer Mapping-Datei aus NTFS-ACLs (Windows-only)
+
+```bash
+dotnet run -- --auto-map "C:\\Shares\\Project=map.txt" --auto-map-recursive
+```
+
+Beispiel: SSL/TLS-Optionen beim SQL-Server (wenn Zertifikat nicht vertraut wird)
+
+```powershell
+dotnet run -- --db-connection "Server=BC-W10-VMD;Database=db_r3;User Id=sa;Password=...;" --trust-server-cert --encrypt true
+```
+
+Hinweis: Verwenden Sie `--trust-server-cert` nur in vertrauenswürdigen Umgebungen; besser ist es, das Serverzertifikat in den Vertrauensspeicher aufzunehmen oder ein Zertifikat einer vertrauenswürdigen CA zu verwenden.
