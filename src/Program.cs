@@ -30,6 +30,8 @@ namespace QloudosFileManager
             string? userManageFile = null;
             string? userManageAction = null;
             string? blacklistFile = null;
+            bool trustServerCert = false;
+            bool? encrypt = null;
             Logger.Stufe verbosity = Logger.Stufe.Short;
 
             // Einfache Argument-Verarbeitung
@@ -83,6 +85,11 @@ namespace QloudosFileManager
                     case "--blacklist":
                         if (i + 1 < args.Length) { blacklistFile = args[++i]; } else { Console.WriteLine("Fehlender Wert für --blacklist"); return 2; }
                         break;
+                    case "--trust-server-cert":
+                        trustServerCert = true; break;
+                    case "--encrypt":
+                        if (i + 1 < args.Length) { var v = args[++i].ToLowerInvariant(); encrypt = v == "true" || v == "1" || v == "yes"; } else { Console.WriteLine("Fehlender Wert für --encrypt"); return 2; }
+                        break;
                     case "--verbosity":
                         if (i + 1 < args.Length)
                         {
@@ -119,13 +126,39 @@ namespace QloudosFileManager
             {
                 // Datei existiert; lies Inhalt und bestimme, ob es ein ConnectionString oder SQLite-Datei ist
                 var content = File.ReadAllText(dbFile).Trim();
-                if (looksLikeConnectionString(content)) connectionString = content;
+                if (looksLikeConnectionString(content))
+                {
+                    try
+                    {
+                        var scsb = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(content);
+                        if (trustServerCert) scsb.TrustServerCertificate = true;
+                        if (encrypt.HasValue) scsb.Encrypt = encrypt.Value;
+                        connectionString = scsb.ConnectionString;
+                    }
+                    catch
+                    {
+                        connectionString = content;
+                    }
+                }
                 else connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = dbFile }.ToString();
             }
             else if (File.Exists("db.sql"))
             {
                 var content = File.ReadAllText("db.sql").Trim();
-                if (looksLikeConnectionString(content)) connectionString = content;
+                if (looksLikeConnectionString(content))
+                {
+                    try
+                    {
+                        var scsb = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(content);
+                        if (trustServerCert) scsb.TrustServerCertificate = true;
+                        if (encrypt.HasValue) scsb.Encrypt = encrypt.Value;
+                        connectionString = scsb.ConnectionString;
+                    }
+                    catch
+                    {
+                        connectionString = content;
+                    }
+                }
                 else connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = "db_r3.sqlite" }.ToString();
             }
             else
