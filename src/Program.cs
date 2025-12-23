@@ -254,20 +254,42 @@ namespace QloudosFileManager
             Console.WriteLine("qloudos_filemanager - kurze Hilfe\n");
             Console.WriteLine("Verwendung:");
             Console.WriteLine("  qloudos_filemanager [options] [paths]");
-            Console.WriteLine("\nOptionen:");
-            Console.WriteLine("  --help, -h, help           : Diese Hilfe anzeigen");
-            Console.WriteLine("  --db-connection <file>     : Pfad zur SQLite-Datei (Standard: db_r3.sqlite)");
-            Console.WriteLine("  --create-db                : Datenbank erstellen, wenn sie nicht existiert");
-            Console.WriteLine("  --import <path>            : Importiere Datei oder Verzeichnis (mehrfach möglich)");
-            Console.WriteLine("  --export <r3path>=<local>  : Exportiere R3-Pfad in lokales Verzeichnis. Ohne '=' -> ./export/{r3path}");
-            Console.WriteLine("  --recursive                : Rekursive Verarbeitung von Verzeichnissen");
-            Console.WriteLine("  --take-owners              : Übernehme (vereinfachte) Besitzerinformationen beim Import");
-            Console.WriteLine("  --map-users-file <file>    : JSON-Datei zur Zuordnung R3-User -> Windows-User (optional)");
+            Console.WriteLine("\nAllgemeine Optionen:");
+            Console.WriteLine("  --help, -h, help                 : Diese Hilfe anzeigen");
+            Console.WriteLine("  --db-connection <conn|pfad>     : ConnectionString oder Pfad zu Datei mit ConnectionString (Default: db_r3.sqlite)");
+            Console.WriteLine("  --create-db                      : Datenbank erstellen, wenn sie nicht existiert (bei SQL Server versucht CREATE DATABASE)");
+            Console.WriteLine("  --trust-server-cert              : SQL Server: TrustServerCertificate=true (umgeht Zertifikatsprüfung)");
+            Console.WriteLine("  --encrypt <true|false>           : SQL Server: Encrypt=true/false (TLS aktivieren/deaktivieren)");
+
+            Console.WriteLine("\nImport / Export:");
+            Console.WriteLine("  --import <path>                  : Importiere Datei oder Verzeichnis (mehrfach möglich)");
+            Console.WriteLine("  --target-root <r3path>           : R3-Zielpfad, ab dem importiert wird (Default: /)");
+            Console.WriteLine("  --export <r3path>=<localdir>     : Exportiere R3-Pfad in lokales Verzeichnis. Ohne '=' -> ./export/{r3path}");
+            Console.WriteLine("  --recursive                      : Rekursive Verarbeitung von Verzeichnissen");
+            Console.WriteLine("  --take-owners                    : Übernehme vereinfachte Besitzerinformationen beim Import");
+
+            Console.WriteLine("\nBenutzer-Mapping / Berechtigungen:");
+            Console.WriteLine("  --map-users-file <file>          : Mapping-Datei (text) im Format local=r3 pro Zeile");
+            Console.WriteLine("  --create-users-if-missing        : Beim Import/Export fehlende Zielbenutzer anlegen (wenn Mapping vorhanden)");
+            Console.WriteLine("  --apply-permissions              : Bei Import/Export Berechtigungen (NTFS->DB) übernehmen (Windows-only)");
+            Console.WriteLine("  --auto-map <search>[=outfile]    : Erzeuge automatisch Mapping aus ACLs unter <search> und speichere als outfile (default auto_mapping.txt)");
+            Console.WriteLine("  --auto-map-recursive             : Suche bei --auto-map rekursiv");
+            Console.WriteLine("  --user-manage-file <file>        : Datei mit Mapping zum manuellen Anlegen/Löschen von Benutzern");
+            Console.WriteLine("  --user-manage-action <action>    : Aktion: add-first|add-second|add-both|delete-first|delete-second|delete-both");
+            Console.WriteLine("  --blacklist <file>               : Textdatei mit Benutzern (eine pro Zeile), die ausgelassen werden sollen");
+
+            Console.WriteLine("\nAusgabe & Debug:");
             Console.WriteLine("  --verbosity <none|short|verbose> : Ausgabelautstärke (keine, kurz, ausführlich)");
+
             Console.WriteLine("\nBeispiele:");
-            Console.WriteLine("  qloudos_filemanager --create-db --db-connection mydb.sqlite --import C:\\Temp\\data --recursive");
-            Console.WriteLine("  qloudos_filemanager --export /myfolder=./out --verbosity verbose");
-            Console.WriteLine("\nHinweis: Parameter sind englisch, Ausgaben auf Deutsch.");
+            Console.WriteLine("  qloudos_filemanager --create-db --db-connection db.sql --import C:\\Temp\\data --recursive --target-root /archive");
+            Console.WriteLine("  qloudos_filemanager --db-connection \"Server=...;Database=db_r3;User Id=sa;Password=...;\" --trust-server-cert --encrypt true --export /project=./out --verbosity verbose");
+            Console.WriteLine("  qloudos_filemanager --auto-map C:\\Shares\\Project=map.txt --auto-map-recursive");
+
+            Console.WriteLine("\nHinweise:");
+            Console.WriteLine("- CLI-Parameter sind englisch, Hilfetexte und Ausgaben sind deutsch.");
+            Console.WriteLine("- Optionen zur Übernahme von NTFS-Berechtigungen funktionieren nur auf Windows und benötigen passende Zugriffsrechte.");
+            Console.WriteLine("- Verwenden Sie --trust-server-cert nur in vertrauenswürdigen Umgebungen, da dadurch die Zertifikatsprüfung umgangen wird.");
         }
     }
 }
