@@ -1,1 +1,1 @@
-Server=BC-W10-VMD;Database=db_r3;User Id=sa;Password=ntba22764bc!
+Server=BC-W10-VMD;Database=db_qloudos;User Id=sa;Password=ntba22764bc!

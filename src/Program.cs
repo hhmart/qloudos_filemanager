@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Principal;
 using QloudosFileManager.Services;
 using QloudosFileManager.Utils;
 
@@ -9,10 +10,41 @@ namespace QloudosFileManager
     /// <summary>
     /// Hauptprogramm der Konsolenanwendung `qloudos_filemanager`.
     /// CLI-Parameter sind englisch, Ausgaben und Hilfe sind deutsch.
+    /// Die Anwendung erfordert Administratorrechte.
     /// </summary>
     internal class Program
     {
         static int Main(string[] args)
+        {
+            // Prüfe Administratorrechte
+            if (!IsRunningAsAdmin())
+            {
+                Console.Error.WriteLine("Fehler: Diese Anwendung erfordert Administratorrechte.");
+                Console.Error.WriteLine("Bitte starten Sie das Programm als Administrator.");
+                return 1;
+            }
+
+            return ContinueExecution(args);
+        }
+
+        /// <summary>
+        /// Prüft, ob die Anwendung mit Administratorrechten läuft.
+        /// </summary>
+        private static bool IsRunningAsAdmin()
+        {
+            try
+            {
+                var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static int ContinueExecution(string[] args)
         {
             // Standardwerte
             string dbFile = "db_r3.sqlite";
